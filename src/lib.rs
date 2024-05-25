@@ -7,3 +7,4 @@
 pub mod functions;
 pub mod vector;
 pub mod slime;
+pub mod particles;

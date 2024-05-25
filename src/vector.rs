@@ -1,6 +1,6 @@
 use std::ops::{Add, AddAssign, Div, Mul, MulAssign, Sub, SubAssign};
 
-#[derive(Clone, Debug, Copy)]
+#[derive(Clone, Debug, Copy, PartialEq)]
 pub struct VectorN<const N: usize> {
 	pub coordinates: [f64; N],
 }
