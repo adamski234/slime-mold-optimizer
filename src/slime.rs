@@ -38,7 +38,8 @@ impl<const N: usize> Slime<N> {
 				let vb_param = random_source.gen_range(-a_param..a_param);
 				self.position = first_slime.position + (second_slime.position * self.weight - first_slime.position) * vb_param;
 			} else {
-				self.position *= random_source.gen_range(-iter_progress..iter_progress);
+				let range_size = 1.0 - iter_progress;
+				self.position *= random_source.gen_range(-range_size..range_size);
 			}
 		}
 		self.function_value = (self.optimization_function)(self.position);
@@ -48,8 +49,8 @@ impl<const N: usize> Slime<N> {
 #[derive(Debug, Clone)]
 pub struct WorldState<const N: usize> {
 	population: Vec<Slime<N>>,
-	best_solution_value: f64,
-	best_solution: VectorN<N>,
+	pub best_solution_value: f64,
+	pub best_solution: VectorN<N>,
 	a_parameter: f64,
 	iteration_count: usize,
 	random_source: ThreadRng,
@@ -88,7 +89,8 @@ impl<const N: usize> WorldState<N> {
 	}
 
 	fn recalculate_a(&mut self, iteration: usize) {
-		self.a_parameter = (-(iteration as f64 / self.iteration_count as f64) + 1.0).atanh();
+		// add one because original code uses matlab, with 1 as index start
+		self.a_parameter = (-((iteration + 1) as f64 / self.iteration_count as f64) + 1.0).atanh();
 	}
 
 	fn recalculate_weights(&mut self) {
@@ -98,7 +100,7 @@ impl<const N: usize> WorldState<N> {
 			return first.function_value.partial_cmp(&second.function_value).unwrap();
 		});
 		let best_value_in_iter = sorted[0].function_value;
-		let worst_value_in_iter = sorted[sorted.len()].function_value;
+		let worst_value_in_iter = sorted[sorted.len() - 1].function_value;
 		for (index, (sorted, original)) in sorted.into_iter().zip(&original_clone).enumerate() {
 			let part = self.random_source.gen::<f64>() * (
 				(best_value_in_iter - original.function_value) / (best_value_in_iter - worst_value_in_iter) + 1.0
