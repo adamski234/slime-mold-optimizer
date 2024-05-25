@@ -54,6 +54,16 @@ impl<const N: usize> Slime<N> {
 				self.position *= random_source.gen_range(-range_size..range_size);
 			}
 		}
+
+		self.position.clamp(self.function_bounds);
+
+		self.function_value = (self.optimization_function)(self.position);
+	}
+
+	fn reset(&mut self, random_source: &mut ThreadRng) {
+		let range = Uniform::from(self.function_bounds.0..self.function_bounds.1);
+		self.position.coordinates.fill_with(|| range.sample(random_source));
+		self.weight = 0.0;
 		self.function_value = (self.optimization_function)(self.position);
 	}
 }
@@ -69,13 +79,11 @@ pub struct WorldState<const N: usize> {
 }
 
 impl<const N: usize> WorldState<N> {
-	pub fn new(pop_size: usize, function_bounds: (f64, f64), iteration_count: usize, optimization_function: Functions<N>, z_parameter: f64) -> Self {
+	pub fn new(pop_size: usize, function_bounds: (f64, f64), iteration_count: usize, optimization_function: Functions<N>, z_parameter: f64, mut rng_source: ThreadRng) -> Self {
 		let mut population = Vec::with_capacity(pop_size);
 
 		let mut best_solution = Default::default();
 		let mut best_solution_value = f64::MAX;
-
-		let mut rng_source = thread_rng();
 
 		for _ in 0..pop_size {
 			let candidate = Slime::new(function_bounds, optimization_function, z_parameter, &mut rng_source);
@@ -108,7 +116,7 @@ impl<const N: usize> WorldState<N> {
 	fn recalculate_weights(&mut self) {
 		let original_clone = self.population.clone();
 		let mut sorted = self.population.iter_mut().collect::<Vec<_>>();
-		sorted.sort_by(|first, second| {
+		sorted.sort_unstable_by(|first, second| {
 			return first.function_value.partial_cmp(&second.function_value).unwrap();
 		});
 		let best_value_in_iter = sorted[0].function_value;
@@ -158,6 +166,19 @@ impl<const N: usize> WorldState<N> {
 		}
 	}
 
+	pub fn reset(&mut self) {
+		self.best_solution_value = f64::MAX;
+		for mold in &mut self.population {
+			mold.reset(&mut self.random_source);
+			if mold.function_value < self.best_solution_value {
+				self.best_solution_value = mold.function_value;
+				self.best_solution = mold.position;
+			}
+		}
+		self.recalculate_a(0);
+		self.recalculate_weights()
+	}
+
 }
 
 #[derive(Clone, Debug)]
@@ -175,7 +196,7 @@ impl<const N: usize> MultiSwarmWorldState<N> {
 		let mut best_solution = VectorN::default();
 		let mut best_solution_value = f64::MAX;
 		for _ in 0..swarm_count {
-			let world = WorldState::new(pop_size, function_bounds, iteration_count, optimization_function, z_parameter);
+			let world = WorldState::new(pop_size, function_bounds, iteration_count, optimization_function, z_parameter, thread_rng());
 			if world.best_solution_value < best_solution_value {
 				best_solution = world.best_solution;
 				best_solution_value = world.best_solution_value;
@@ -214,10 +235,10 @@ impl<const N: usize> MultiSwarmWorldState<N> {
 					let migration_count = (lambda * self.swarms[first_index].population.len() as f64) as usize;
 
 					let mut sorted_first = self.swarms[first_index].population.clone();
-					sorted_first.sort_by(|a, b| a.partial_cmp(b).unwrap()); // Worst are first
+					sorted_first.sort_unstable_by(|a, b| a.partial_cmp(b).unwrap()); // Worst are first
 
 					let mut sorted_second_reverse = self.swarms[second_index].population.clone();
-					sorted_second_reverse.sort_by(|a, b| a.partial_cmp(b).unwrap().reverse()); // Best are first
+					sorted_second_reverse.sort_unstable_by(|a, b| a.partial_cmp(b).unwrap().reverse()); // Best are first
 					
 					let mut migrated_first = sorted_first.split_off(migration_count); // contains best from first
 					let mut left_second = sorted_second_reverse.split_off(migration_count); // contains worst from second
@@ -248,5 +269,13 @@ impl<const N: usize> MultiSwarmWorldState<N> {
 		for iter in 0..self.iteration_count {
 			self.do_iteration(iter);
 		}
+	}
+
+	pub fn reset(&mut self) {
+		self.best_solution_value = f64::MAX;
+		for swarm in &mut self.swarms {
+			swarm.reset();
+		}
+		self.update_best_solutions();
 	}
 }

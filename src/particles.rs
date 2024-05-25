@@ -258,4 +258,12 @@ impl<const N: usize> MultiSwarmWorldState<N> {
 			self.do_iteration();
 		}
 	}
+
+	pub fn reset(&mut self) {
+		self.best_solution_value = f64::MAX;
+		for swarm in &mut self.swarms {
+			swarm.reset();
+		}
+		self.update_best_solutions();
+	}
 }
